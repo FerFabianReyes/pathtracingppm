@@ -6,7 +6,7 @@
 #include <time.h>
 
 
-#define N_ 512
+#define N_ 2048
 
 class Vector 
 {
@@ -108,10 +108,15 @@ Sphere spheres[] = {
         Sphere(1e5,  Point(0, 0, -1e5 - 81.6),  Color(.25, .75, .25)), // pared detras
         Sphere(1e5,  Point(0, -1e5 - 40.8, 0),  Color(.25, .75, .75)), // suelo
         Sphere(1e5,  Point(0, 1e5 + 40.8, 0),  Color(.75, .75, .25)), // techo
-        Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.9, .9, .9), Color(), CONDUCTOR, 0.3, 
+        // esferas normales para el resto de muestreos
+        Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.2, .3, .4)), 
+        Sphere(16.5, Point(23, -24.3, -3.6),     Color(.4, .3, .2)),
+
+        // esferas de aluminio y oro para microfacet
+       /* Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.9, .9, .9), Color(), CONDUCTOR, 0.3, 
            Color(1.44, 0.96, 0.61), Color(7.47, 6.52, 5.29)), // Aluminio
         Sphere(16.5, Point(23, -24.3, -3.6),     Color(.9, .8, .3), Color(), CONDUCTOR, 0.3,
-           Color(0.143, 0.374, 1.442), Color(3.982, 2.386, 1.603)), // Oro
+           Color(0.143, 0.374, 1.442), Color(3.982, 2.386, 1.603)), // Oro */
         FuenteLuminosa(10.5, Point(0, 24.3, 0), Color(1, 1, 1), Color(10,10,10)) // fuente normal
     	//FuentePuntual(Point(0, 24.3, 0), Color(4000, 4000, 4000)) // fuente puntual 
 };
@@ -695,11 +700,11 @@ int main(int argc, char *argv[]) {
 			// computar el color del pixel para el punto que intersectó el rayo desde la camara
 
 			//Descomentar el tipo de muestreo que se quiere usar. Recordar también descomentar la fuente que se va a usar, normal p puntual
-			pixelValue = shadeHemisfer( Ray(camera.o, cameraRayDir.normalize()) ); // Hemisferico
+			//pixelValue = shadeHemisfer( Ray(camera.o, cameraRayDir.normalize()) ); // Hemisferico
 			//pixelValue = shadeCoseno( Ray(camera.o, cameraRayDir.normalize()) ); // Coseno hemisferico
 			//pixelValue = shadeFuentePuntual( Ray(camera.o, cameraRayDir.normalize()) ); // Fuente Puntual
 			//pixelValue = shadeArea( Ray(camera.o, cameraRayDir.normalize()) ); // Area
-			//pixelValue = shadeArea( Ray(camera.o, cameraRayDir.normalize()) ); // Ángulo Sólidp
+			pixelValue = shadeAnguloSolido( Ray(camera.o, cameraRayDir.normalize()) ); // Ángulo Sólidp
 			//pixelValue = shadeMicrofacet( Ray(camera.o, cameraRayDir.normalize()) ); // Microfacet
 			
 
