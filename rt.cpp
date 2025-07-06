@@ -6,7 +6,7 @@
 #include <time.h>
 
 
-#define N_ 2048
+#define N_ 32
 
 class Vector 
 {
@@ -89,7 +89,7 @@ public:
 
 class FuentePuntual : public Sphere {
 public:
-    FuentePuntual(Point p_, Color e_ = Color(10, 10, 10), double r_ = 0) 
+    FuentePuntual(Point p_, Color e_ = Color(4000, 4000, 4000), double r_ = 0) 
         : Sphere(r_, p_, Color(), e_) {} 
 };
 
@@ -109,16 +109,16 @@ Sphere spheres[] = {
         Sphere(1e5,  Point(0, -1e5 - 40.8, 0),  Color(.25, .75, .75)), // suelo
         Sphere(1e5,  Point(0, 1e5 + 40.8, 0),  Color(.75, .75, .25)), // techo
         // esferas normales para el resto de muestreos
-        Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.2, .3, .4)), 
-        Sphere(16.5, Point(23, -24.3, -3.6),     Color(.4, .3, .2)),
+       /* Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.2, .3, .4)), 
+        Sphere(16.5, Point(23, -24.3, -3.6),     Color(.4, .3, .2)),*/
 
         // esferas de aluminio y oro para microfacet
-       /* Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.9, .9, .9), Color(), CONDUCTOR, 0.3, 
+        Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.9, .9, .9), Color(), CONDUCTOR, 0.3, 
            Color(1.44, 0.96, 0.61), Color(7.47, 6.52, 5.29)), // Aluminio
         Sphere(16.5, Point(23, -24.3, -3.6),     Color(.9, .8, .3), Color(), CONDUCTOR, 0.3,
-           Color(0.143, 0.374, 1.442), Color(3.982, 2.386, 1.603)), // Oro */
-        FuenteLuminosa(10.5, Point(0, 24.3, 0), Color(1, 1, 1), Color(10,10,10)) // fuente normal
-    	//FuentePuntual(Point(0, 24.3, 0), Color(4000, 4000, 4000)) // fuente puntual 
+           Color(0.143, 0.374, 1.442), Color(3.982, 2.386, 1.603)), // Oro 
+        FuenteLuminosa(10.5, Point(0, 24.3, 0), Color(1, 1, 1)) // fuente normal
+    	//FuentePuntual(Point(0, 24.3, 0)) // fuente puntual 
 };
 
 Sphere& fuenteLuminosa = spheres[7];
@@ -395,17 +395,16 @@ Color BRDFMicrofacet(const Sphere &obj, const Vector &wi, const Vector &wo, cons
     Vector wiLocal = globalALocal(wi, normal, s, t);
     Vector woLocal = globalALocal(wo, normal, s, t);
     
-    if (wiLocal.z <= 0 || woLocal.z <= 0) return Color();
+    if (wiLocal.z <= 1e-6 || woLocal.z <= 1e-6) return Color();
     
-    Vector whLocal = (wiLocal + woLocal);
-    whLocal = whLocal.normalize();
+    Vector whLocal = (wiLocal + woLocal).normalize();
     
     double D = DistribucionBeckmann(whLocal, obj.aspereza);
     double G = TerminoG(woLocal, wiLocal, whLocal, obj.aspereza);
-    Color F = FresnelConductor(wiLocal.dot(whLocal), obj.eta, obj.kappa);
+    Color F = FresnelConductor(abs(wiLocal.dot(whLocal)), obj.eta, obj.kappa); 
     
-    double denominador = 4.0 * woLocal.z * wiLocal.z;
-    if (denominador == 0) return Color();
+    double denominador = 4.0 * abs(woLocal.z) * abs(wiLocal.z); 
+    if (denominador < 1e-6) return Color();
     
     return Color(F.x * D * G / denominador, F.y * D * G / denominador, F.z * D * G / denominador);
 }
@@ -468,7 +467,7 @@ Color monteCarloAnguloSolido(int N, Vector &n, Point &x, const Sphere &obj) {
     return monteCarlo(N, n, x, obj, MuestreoAnguloSolidoWrapper);
 }
 
-Color monteCarloFuentePuntual(int N, Vector &n, Point &x, const Sphere &obj) {
+Color monteCarloFuentePuntual(Vector &n, Point &x, const Sphere &obj) {
     Point puntoSeguro = x + n * 1e-4;
     
     // obtener dirección y punto
@@ -509,6 +508,7 @@ Color monteCarloFuentePuntual(int N, Vector &n, Point &x, const Sphere &obj) {
 
 Color pathTracing(const Ray &ray, int profundidad, int maxProfundidad) {
     if (profundidad >= maxProfundidad) return Color();
+    
     double t;
     int id;
     if (!intersect(ray, t, id)) return Color();
@@ -517,68 +517,68 @@ Color pathTracing(const Ray &ray, int profundidad, int maxProfundidad) {
     Point x = ray.o + ray.d * t;
     Vector n = (x - obj.p).normalize();
     
-    // si es luz, da la emisión
+    // Si es fuente luminosa, retornar emisión
     if (obj.e.x > 0 || obj.e.y > 0 || obj.e.z > 0) {
         return obj.e;
     }
 
     Point puntoSeguro = x + n * 1e-4;
-
-    Color iluminacionDirecta = monteCarloAnguloSolido(N_, n, x, obj); 
-    Color iluminacionIndirecta;
+    Color L(0,0,0);
     
-    // muestreo para siguiente rebote
-    double prob;
-    Vector wo = ray.d * -1; // dirección hacia la vista  
+    // Iluminación directa. Se puede cambiar el tipo de muestreo
+    L = L + monteCarloCoseno(N_,n, x, obj);
+    
+    // Muestreo según material
+    Vector wo = Vector(0,0,0) - ray.d;
+    
     if (obj.material == DIFFUSO) {
-        // material difuso - muestreo coseno hemisférico
+        double prob;
         MuestreoResult resultado = MuestreoCosenoHemisferico(puntoSeguro, n, prob);
         Vector wi = resultado.wi;
         
-        if (prob > 0 && n.dot(wi) > 0) {
-            Ray rayIndirecto(puntoSeguro, wi);
-            Color Li = pathTracing(rayIndirecto, profundidad + 1, maxProfundidad);
+        if (prob > 1e-6 && n.dot(wi) > 1e-6) {
+            Ray nuevoRayo(puntoSeguro, wi);
+            Color Li = pathTracing(nuevoRayo, profundidad + 1, maxProfundidad);
             Color fr = obj.c * (1.0 / M_PI);
             double cosTheta = n.dot(wi);
-            iluminacionIndirecta = Li.mult(fr) * (cosTheta / prob);
+            
+            double factor = (cosTheta / prob);
+            L = L + Color(fr.x * Li.x * factor, fr.y * Li.y * factor, fr.z * Li.z * factor);
         }
-    } else if (obj.material == CONDUCTOR) {
-        // material conductor - muestreo microfacet
+    } 
+    else if (obj.material == CONDUCTOR) {
         double u1 = (double)rand() / RAND_MAX;
         double u2 = (double)rand() / RAND_MAX;
         
         Vector s, t;
         coordinateSystem(n, s, t);
         
-        // muestrear vector de dirección media
         Vector whLocal = MuestreoMicrofacet(obj.aspereza, u1, u2);
         Vector wh = localAGlobal(whLocal, n, s, t);
         wh = wh.normalize();
         
-        // reflexión esoecular respecto a wh
-        Vector wi = wo * -1.0 + wh * (2.0 * wo.dot(wh));
-
+        Vector wi = wh * (2.0 * wo.dot(wh)) - wo;
         wi = wi.normalize();
         
-        // verificar que la dirección esté en el hemisferio correcto
-        if (n.dot(wi) > 0) {
-            Ray rayIndirecto(puntoSeguro, wi);
-            Color Li = pathTracing(rayIndirecto, profundidad + 1, maxProfundidad);
-            Color fr = BRDFMicrofacet(obj, wi, wo, n);
-            double cosTheta = n.dot(wi);
+        if (n.dot(wi) > 1e-6) {
+            double D = DistribucionBeckmann(whLocal, obj.aspereza);
+            double G = TerminoG(globalALocal(wo, n, s, t), globalALocal(wi, n, s, t), whLocal, obj.aspereza);
+            Color F = FresnelConductor(fabs(wo.dot(wh)), obj.eta, obj.kappa);
             
-            if (cosTheta > 0) {
-                // probabilidad del muestreo microfacet
-                double D = DistribucionBeckmann(whLocal, obj.aspereza);
-                double probMicrofacet = D * whLocal.z / (4.0 * wo.dot(wh));
-
-                if (probMicrofacet > 0) {
-                    iluminacionIndirecta = Li.mult(fr) * (cosTheta / probMicrofacet);
-                }
+            double probMicrofacet = D * whLocal.z / (4.0 * fabs(wo.dot(wh)));
+            double denom = probMicrofacet * fabs(n.dot(wh));
+            
+            if (denom > 1e-6) {
+                Ray nuevoRayo(puntoSeguro, wi);
+                Color Li = pathTracing(nuevoRayo, profundidad + 1, maxProfundidad);
+                double factor = (G * fabs(wo.dot(wh)) / denom);
+                
+                L = L + Color(F.x * Li.x * factor, F.y * Li.y * factor, F.z * Li.z * factor);
             }
         }
     }
-    return iluminacionDirecta + iluminacionIndirecta;
+    
+    return Color(fmin(fmax(L.x, 0.0), 1.0), fmin(fmax(L.y, 0.0), 1.0), fmin(fmax(L.z, 0.0), 1.0));
 }
 
 
@@ -591,8 +591,8 @@ bool shade(const Ray &r, Point &x, Vector &n, const Sphere *&obj) {
         return false;  // el rayo no intersecto objeto
     
     obj = &spheres[id];
-    x = r.o + r.d * t;                    // punto de intersección
-    n = (x - obj->p).normalize();         // normal en el punto de intersección
+    x = r.o + r.d * t; // punto de intersección
+    n = (x - obj->p).normalize(); // normal en el punto de intersección
     
     return true;
 }
@@ -636,7 +636,7 @@ Color shadeFuentePuntual(const Ray &r) {
     if (obj->e.x > 0 || obj->e.y > 0 || obj->e.z > 0) { 
         return obj->e; 
     }
-    return obj->e + monteCarloFuentePuntual(N_, n, x, *obj);
+    return obj->e + monteCarloFuentePuntual(n, x, *obj);
 }
 
 Color shadeArea(const Ray &r) {
@@ -660,7 +660,7 @@ Color shadeAnguloSolido(const Ray &r) {
     
     if (!shade(r, x, n, obj))
         return Color();  // el rayo no intersecto objeto, return Vector() == negro
-    // Si el objeto emite luz, retornar directamente la emisión
+    // si el objeto emite luz, retornar directamente la emisión
     if (obj->e.x > 0 || obj->e.y > 0 || obj->e.z > 0) { 
         return obj->e; 
     }
@@ -668,8 +668,16 @@ Color shadeAnguloSolido(const Ray &r) {
 }
 
 Color shadeMicrofacet(const Ray &r) {
-    // Usar path tracing con máximo 10 rebotes
-    return pathTracing(r, 0, 10);
+    Color L(0,0,0);
+    int spp = 64; // samples per pixel
+    for (int i = 0; i < spp; ++i) {
+        Color sample = pathTracing(r, 0, 8);
+        // acumulación
+        L = Color(L.x + sample.x / spp,
+                 L.y + sample.y / spp,
+                 L.z + sample.z / spp);
+    }
+    return L;
 }
 
 int main(int argc, char *argv[]) {
@@ -704,8 +712,8 @@ int main(int argc, char *argv[]) {
 			//pixelValue = shadeCoseno( Ray(camera.o, cameraRayDir.normalize()) ); // Coseno hemisferico
 			//pixelValue = shadeFuentePuntual( Ray(camera.o, cameraRayDir.normalize()) ); // Fuente Puntual
 			//pixelValue = shadeArea( Ray(camera.o, cameraRayDir.normalize()) ); // Area
-			pixelValue = shadeAnguloSolido( Ray(camera.o, cameraRayDir.normalize()) ); // Ángulo Sólidp
-			//pixelValue = shadeMicrofacet( Ray(camera.o, cameraRayDir.normalize()) ); // Microfacet
+		    //pixelValue = shadeAnguloSolido( Ray(camera.o, cameraRayDir.normalize()) ); // Ángulo Sólidp
+			pixelValue = shadeMicrofacet( Ray(camera.o, cameraRayDir.normalize()) ); // Microfacet
 			
 
 			// limitar los tres valores de color del pixel a [0,1]
