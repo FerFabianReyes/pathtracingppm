@@ -521,7 +521,7 @@ Color pathTracing(const Ray &ray, int profundidad, int maxProfundidad) {
     if (obj.e.x > 0 || obj.e.y > 0 || obj.e.z > 0) {
         return obj.e;
     }
-
+ 
     Point puntoSeguro = x + n * 1e-4;
     Color L(0,0,0);
     
