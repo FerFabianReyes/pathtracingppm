@@ -255,74 +255,107 @@ MuestreoResult MuestreoUniformeHemisferico(const Point &x, const Vector &n, doub
 
 // --------------------------- HORA 3 ------------------------------------------------------------------------
 
-
+// El muestreo de conseno hemisférico es una mejora al muestreo de hemisferio.
+// recordando que en el muestreo del heisferio le damos la misma importancia a todos los puntos del hemisferio
+// ahora le damos más importancia a la normal que "sale" de la esfera, ya que entre más 
+// recto esté con la luz, más contribución tendra, en lugar de las que están inclinadas a la fuente de luz
+// estas fórmulas están en el tema 3
 MuestreoResult MuestreoCosenoHemisferico(const Point &x, const Vector &n, double &prob) {
-	double u1 = (double)rand() / RAND_MAX;
+	double u1 = (double)rand() / RAND_MAX; // igual necesitamos dos números aleatorios
 	double u2 = (double)rand() / RAND_MAX;
 
-	double theta = asin(sqrt(u1));  
-	double phi = 2.0 * M_PI * u2;
+	double theta = asin(sqrt(u1)); // cálculamos el ángulo polar
+	double phi = 2.0 * M_PI * u2; // y el azimutal
+    // con estas fórmulas, tenemos nuestras coordenadas en un punto que favorece a lo descrito arriba
+    // entre más cerca de la normal esté, mayor contribución, entre más inclinado, menor contribución 
 
-	double cosTheta = cos(theta); // para las coordenadas locales 
-	double sinTheta = sin(theta);
+	double cosTheta = cos(theta); // igual que en el muestreo de hemisferio, necesitamos pasar a  
+	double sinTheta = sin(theta); // otro sistema de coordenadas.
 
 	Vector s, t, normal = n;
-	coordinateSystem(normal, s, t);
+	coordinateSystem(normal, s, t); // creamos el sistema de coordenadas local
 
-	Vector localDir = esfericasACartesianas(cosTheta, sinTheta, phi);
-    Vector wi = localAGlobal(localDir, normal, s, t);
-    wi = wi.normalize();
+	Vector localDir = esfericasACartesianas(cosTheta, sinTheta, phi); // pasamos nuestras coordenadas cartesianas a locales
+    Vector wi = localAGlobal(localDir, normal, s, t); // de locales a globales
+    wi = wi.normalize(); // y normalizamos ya que sólo nos interesa la dirección
 
-    prob = cosTheta / M_PI;
+    prob = cosTheta / M_PI; // ahora nuestra probabilidad ya no es constante, depende del ángulo polar
+    //  se divide entre π porque es la constante de normalización para que la integral de la PDF sobre el hemisferio sea igual a 1.
     
-    return MuestreoResult(wi, prob, Point());
+    return MuestreoResult(wi, prob, Point()); // y regresamos la dirección y la probabilidad. Como este muestreo no va a una 
+                                              // fuent de luz específica, entonces ponemos que es en 0 
 }
 
-MuestreoResult MuestreoFuentePuntual(const Point &x, double &prob) {
+
+// Para el muestreo de una fuente puntual, debemos de conocer su posición, ya que como sólo es un punto, atinarle es
+// imposible. En este muestreo conocemos la posición de la fuente de luz. 
+MuestreoResult MuestreoFuentePuntual(const Point &x, double &prob) { // recibimos un punto y la probabilidad a calcular
 	Vector wi = fuenteLuminosa.p - x; // apunta al centro de la fuente
-	prob = 1.0;
-	return MuestreoResult(wi, prob, fuenteLuminosa.p);
+	prob = 1.0; // la probabilidad es 1 por que siempre le daremos a la fuente
+	return MuestreoResult(wi, prob, fuenteLuminosa.p);  // y damos el resultado. Ahora como punto ponemos el punto de la fuente de luz
 }
 // --------------------------- HORA 4 ------------------------------------------------------------------------
 
+// esta función sólo nos escoge un punto aleatorio en la superficie de la fuente de luz en 248.
+// se usa nada más para el muestreo de área
+// recibe el centro de la fuente y el radio
 Point puntoAleatorioEnEsfera(const Point &centro, double radio) {
-	// vomo en muestreo hemisférico
-	double u1 = (double)rand() / RAND_MAX;
+	// en el tema 4 se dice que se usa como en muestreo hemisférico
+	double u1 = (double)rand() / RAND_MAX; // necesitamos dos números aleatorios
 	double u2 = (double)rand() / RAND_MAX;
-	double theta = acos(2.0 * u2 - 1.0);
-	double phi = 2.0 * M_PI * u1;
+	double theta = acos(2.0 * u2 - 1.0); // con 2.0 * u2 - 1.0 nos aseguramos que sólo esté entre -1 y 1 el ángulo polar
+	double phi = 2.0 * M_PI * u1;  // ángulo azimutal
 
-	double cosTheta = cos(theta);
+	double cosTheta = cos(theta); // igual para el sistema de coordenadas local
     double sinTheta = sin(theta);
 
-	Vector puntoUnitario = esfericasACartesianas(cosTheta, sinTheta, phi);
-    return centro + puntoUnitario * radio;
+	Vector puntoUnitario = esfericasACartesianas(cosTheta, sinTheta, phi); // las coordenadas esféricas que tenemos las pasamos a cartesianas
+    return centro + puntoUnitario * radio; // ahora a este punto lo multiplicamos para que esté en el borde de la 
+                                           // fuente de luz y lo trazladamos al centro 
 }
 
-MuestreoResult MuestreoArea(const Point &x, double &prob) {
-    Point puntoEnFuente = puntoAleatorioEnEsfera(fuenteLuminosa.p, fuenteLuminosa.r);
 
-    Vector wi = puntoEnFuente - x;
+// para el muestreo de área en 262 es que tenemos una fuente de luz que sabemos donde está
+// es como el muestreo hemisférico pero en lugar de buscar la fuente de luz, hacemos
+// el muestreo en el área de la fuente de luz
+// las formulas están en el tema 4
+MuestreoResult MuestreoArea(const Point &x, double &prob) { // recibimos un punto y la variable a calcular de la probabilidad
+    Point puntoEnFuente = puntoAleatorioEnEsfera(fuenteLuminosa.p, fuenteLuminosa.r); // escogemos un punto aleatorio en la fuente
+
+    Vector wi = puntoEnFuente - x; // cáclulamos el vector desde el punto x hacia la fuente luminosa
     double distanciaAlCuadrado = wi.dot(wi);
-    wi = wi.normalize();
+    wi = wi.normalize(); // y normalizamos por que sólo nos interesa la dirección
 
-    double areaEsfera = 4.0 * M_PI * fuenteLuminosa.r * fuenteLuminosa.r;
+    double areaEsfera = 4.0 * M_PI * fuenteLuminosa.r * fuenteLuminosa.r; // el áre a de 4*pi*r^2
     Vector normalFuente = (puntoEnFuente - fuenteLuminosa.p).normalize(); // normal en el punto de la fuente 
     Vector direccionHaciaX = (x - puntoEnFuente).normalize(); // dirección desde el punto en la fuente hacia el punto x
     double cosThetaFuente = normalFuente.dot(direccionHaciaX);  // coseno del ángulo entre la normal de la fuente y la dirección hacia x
      
     // si el punto está en la parte de atrás de la fuente la probabiildad es baja
+    // Es el coseno del ángulo entre la normal de la fuente y la dirección hacia el punto
+    // Representa cuánta luz "escapa" de la fuente en esa dirección
+    // Si cosThetaFuente = 0: la fuente está de lado (poca contribución)
+    // Si cosThetaFuente < 0: la fuente está de espaldas (no hay contribución)
     if (cosThetaFuente <= 0) {
         cosThetaFuente = 1e-6;
     }
 
     prob = distanciaAlCuadrado / (areaEsfera * fabs(cosThetaFuente)); // = 1/area * (r^2 / |cos(theta_fuente)|)
+    // la fórmula de la probabilidad viene de que de área se pasa a ángulo sólido. 
+    // Es como convertir "probabilidad por metro cuadrado de la fuente" a "probabilidad por dirección que puedo mirar"
+    //dA = área infinitesimal en la fuente
+    //r² = la "dilución" de la luz con la distancia
+    //cos(θ) = proyección (solo la componente perpendicular contribuye)
+    //dΩ = ángulo sólido visto desde el punto
+
     return MuestreoResult(wi, prob, puntoEnFuente);
 }
 
 // --------------------------- HORA 5 ------------------------------------------------------------------------
 
 // ***************** LUNES ******************************************************************************
+
+//
 MuestreoResult MuestreoAnguloSolido(const Point &x, double &prob) {
     Vector dirCentro = fuenteLuminosa.p - x; 
     double distancia = sqrt(dirCentro.dot(dirCentro)); // distancia del punto x al centro de la fuente
