@@ -7,6 +7,8 @@
 
 
 #define N_ 32
+#define N_ESFERAS 9
+#define N_ARREGLO 8
 
 class Vector 
 {
@@ -109,19 +111,24 @@ Sphere spheres[] = {
         Sphere(1e5,  Point(0, -1e5 - 40.8, 0),  Color(.25, .75, .75)), // suelo
         Sphere(1e5,  Point(0, 1e5 + 40.8, 0),  Color(.75, .75, .25)), // techo
         // esferas normales para el resto de muestreos
-       /* Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.2, .3, .4)), 
-        Sphere(16.5, Point(23, -24.3, -3.6),     Color(.4, .3, .2)),*/
+        Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.2, .3, .4)), 
+        Sphere(16.5, Point(23, -24.3, -3.6),     Color(.4, .3, .2)),
 
         // esferas de aluminio y oro para microfacet
-        Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.9, .9, .9), Color(), CONDUCTOR, 0.3, 
+       /* Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.9, .9, .9), Color(), CONDUCTOR, 0.3, 
            Color(1.44, 0.96, 0.61), Color(7.47, 6.52, 5.29)), // Aluminio
         Sphere(16.5, Point(23, -24.3, -3.6),     Color(.9, .8, .3), Color(), CONDUCTOR, 0.3,
-           Color(0.143, 0.374, 1.442), Color(3.982, 2.386, 1.603)), // Oro 
-        FuenteLuminosa(10.5, Point(0, 24.3, 0), Color(1, 1, 1)) // fuente normal
+           Color(0.143, 0.374, 1.442), Color(3.982, 2.386, 1.603)), // Oro */
+
+        // fuentes luminosas   
+        //FuenteLuminosa(10.5, Point(0, 24.3, 0), Color(1, 1, 1)) // fuente normal
     	//FuentePuntual(Point(0, 24.3, 0)) // fuente puntual 
+
+        FuenteLuminosa(10.5, Point(-23, 24.3, 0), Color(1, 1, 1), Color(12, 5, 5)),
+        FuenteLuminosa(5, Point(23, 24.3, -50), Color(1, 1, 1), Color(5, 5, 12)) 
 };
 
-Sphere& fuenteLuminosa = spheres[7];
+Sphere& fuenteLuminosa = spheres[N_ARREGLO];
 
 // limita el valor de x a [0,1]
 inline double clamp(const double x) { 
@@ -143,7 +150,7 @@ inline int toDisplayValue(const double x) {
 // almacenar en id el indice de spheres[] de la esfera cuya interseccion es mas cercana
 inline bool intersect(const Ray &r, double &t, int &id) {
 	t = 1e20; //Un número muy grande 
-	int numSpheres = 8; //El número de las esferas
+	int numSpheres = N_ESFERAS; //El número de las esferas
 	for(int i = 0; i < numSpheres; i++){ //verificamos todas las esferas
 		double dist = spheres[i].intersect(r); //guardamos la distancia en la que interseccta la esfera i
 		if(dist > 1e-4 && dist < t) // si la distancia es mayor que ~0 y menor que t 
