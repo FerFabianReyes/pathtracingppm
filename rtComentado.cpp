@@ -307,7 +307,7 @@ Point puntoAleatorioEnEsfera(const Point &centro, double radio) {
 	double phi = 2.0 * M_PI * u1;  // ángulo azimutal
 
 	double cosTheta = cos(theta); // igual para el sistema de coordenadas local
-    double sinTheta = sin(theta);
+    double sinTheta = sin(theta); 
 
 	Vector puntoUnitario = esfericasACartesianas(cosTheta, sinTheta, phi); // las coordenadas esféricas que tenemos las pasamos a cartesianas
     return centro + puntoUnitario * radio; // ahora a este punto lo multiplicamos para que esté en el borde de la 
@@ -355,79 +355,103 @@ MuestreoResult MuestreoArea(const Point &x, double &prob) { // recibimos un punt
 
 // ***************** LUNES ******************************************************************************
 
-//
-MuestreoResult MuestreoAnguloSolido(const Point &x, double &prob) {
-    Vector dirCentro = fuenteLuminosa.p - x; 
+// El muestreo de ángulo sólido en 283 es una mejora en el muestreo de área, ya que ahora se muestreoa directamente con
+// un ángulo solido. Ahora, las muestras se obtienen en un cono que va desde el punto x hasta la fuente
+// dentro de ese cono se muestrea
+MuestreoResult MuestreoAnguloSolido(const Point &x, double &prob) { // recibimos un punto y probabilidad a calcular
+    Vector dirCentro = fuenteLuminosa.p - x; // tenemos un vector desde el punto X hacia el centro de la fuente luminosa
     double distancia = sqrt(dirCentro.dot(dirCentro)); // distancia del punto x al centro de la fuente
    
     double sinThetaMax = fuenteLuminosa.r / distancia; 
-    double thetaMax = asin(sinThetaMax);
+    double thetaMax = asin(sinThetaMax); // thetaMax es el ángulo que delimita el borde del cono en el que estamos muestreando
     
-    double u1 = (double)rand() / RAND_MAX;
-    double u2 = (double)rand() / RAND_MAX;
+    double u1 = (double)rand() / RAND_MAX; // necesitamos dos números aleatorios
+    double u2 = (double)rand() / RAND_MAX; // para el muestreo
     
-    double cosTheta = (1.0 - u1) + u1 * cos(thetaMax);
-    double sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+    double cosTheta = (1.0 - u1) + u1 * cos(thetaMax); // esto genera el rango que va desde cos(0) = 1 (dirección directa al centro) hasta cos(thetaMax) (borde del cono)
+    double sinTheta = sqrt(1.0 - cosTheta * cosTheta);  // el seno se saca por identidades trigonométricas
     double phi = 2.0 * M_PI * u2;
 
-    Vector localDir = esfericasACartesianas(cosTheta, sinTheta, phi);
+    Vector localDir = esfericasACartesianas(cosTheta, sinTheta, phi); // las direcciones esféricas que obtuvimos las pasamos a cartesianas
 
-    Vector centroNormalizado = dirCentro.normalize();
-    Vector s, t;
-    coordinateSystem(centroNormalizado, s, t);
+    Vector centroNormalizado = dirCentro.normalize(); // normalizamos la dirección hacia el centro de la fuente para construir el sistema de coordenadas local
+    Vector s, t; 
+    coordinateSystem(centroNormalizado, s, t); // generamos el sistema de coordenadas con respecto a la fuente luminosa
 
-    Vector wi = localAGlobal(localDir, centroNormalizado, s, t);
-    wi = wi.normalize();
+    Vector wi = localAGlobal(localDir, centroNormalizado, s, t); // ahora lo pasamos a global
+    wi = wi.normalize(); // y lo normalizamos
 
     //punto de intersección en la fuente
-    Ray rayo(x, wi);
-    double tInterseccion = fuenteLuminosa.intersect(rayo);
-    Point puntoEnFuente = x + wi * tInterseccion;
+    Ray rayo(x, wi); // ahora creamos un rayo en la dirección muestreada
+    double tInterseccion = fuenteLuminosa.intersect(rayo); // encontramos donde intersecta la fuente luminosa
+    Point puntoEnFuente = x + wi * tInterseccion; //// se calcula el punto de la intersección
 
-    prob = 1.0 / (2.0 * M_PI * (1.0 - cos(thetaMax)));
+    prob = 1.0 / (2.0 * M_PI * (1.0 - cos(thetaMax))); // la probablididad es constante para todas las muestras dentro del cono
     
     return MuestreoResult(wi, prob, puntoEnFuente);
 }
 // --------------------------- HORA 6 ------------------------------------------------------------------------
 
+// es una función en 316 que si x es mayor a 0 es 1 pero si no es 0
 double xMas(double x) {
     return x > 0 ? 1.0 : 0.0;
 }
 
+// Es el término D para el microfacet 
+// D representa la microsuperficie. Dice cuántas microfacetas están orientadas a wh
+// Depende de eta que fija la esperaza del material
+// Si D(wh) es alto en una dirección wh, significa que muchas microfacetas están alineadas con esa dirección
+// Superficies rugosas (eta alto): D se dispersa, creando reflejos difusos y borrosos.
+// Superficies lisas (eta bajo): D se concentra cerca de n, produciendo reflejos nítidos.
+// Las ecuaciones están en el tema 5
 double DistribucionBeckmann(const Vector &wh, double aspereza) {
-    double cosTheta = wh.z; // ángulo con la normal
-    double alpha = aspereza;
-    double cos2Theta = cosTheta * cosTheta;
-    double tan2Theta = (1.0 - cos2Theta) / cos2Theta;
-    
-    double chi = xMas(cosTheta);
-    return chi * exp(-tan2Theta / (alpha * alpha)) / 
-           (M_PI * alpha * alpha * cos2Theta * cos2Theta);
+    double cosTheta = wh.z; // z apunta a la normal de la superficie. wh es el vector de la microfaceta.
+                        // En coordenadas locales, la normal es Vector(0,0,1)
+                        // cos(θ) = wh · normal = (x,y,z) · (0,0,1) = z
+    double alpha = aspereza; // definimos el valor de la aspereza
+    double cos2Theta = cosTheta * cosTheta; // definimos cosTheta^2 pq después tiene que ser ^4. en las coordenadas esféricas wh.z = cos(θ)
+    double tan2Theta = (1.0 - cos2Theta) / cos2Theta; // en la ecuación también nos piden que sea tan^2
+                    //  tan²(θ) = sin²(θ) / cos²(θ).      sin²(θ) = 1 - cos²(θ)
+    double x = xMas(cosTheta); // es una función de visibilidad o función de  máscara. 
+                // χ = 1 si cosTheta > 0 (la microfaceta es visible)
+                // χ = 0 si cosTheta ≤ 0 (la microfaceta no es visible)
+                // es el ángulo entre el vector de dirección media y la normal
+    return x * exp(-tan2Theta / (alpha * alpha)) / 
+           (M_PI * alpha * alpha * cos2Theta * cos2Theta); //fórmuma para calcúlar el valor de B
 }
 
-double TerminoG1(const Vector &w, const Vector &wh, double aspereza) {
-    double cosTheta = w.z;
-    if (cosTheta <= 0) return 0.0;
+// en la 331  calcula la fracción de luz que no es obstruida por las microfacetas en una dirección específica
+double TerminoG1(const Vector &w, const Vector &wh, double aspereza) { // recibe un vector w, puede ser wi o wo, el vector wh y la asperza
+    double cosTheta = w.z;  // es equivalente a w * n en coordenadas locales, ya que cos(θ) = wh · normal = (x,y,z) · (0,0,1) = z
+    if (cosTheta <= 0) return 0.0; // si la contribución está derás de la superficie, no hay contribución
+    // theta es el ángulo entre la dirección de la luz (wi o wo) y la normal (n).
+    double alpha = aspereza; // definimos la aspereza
+    double cos2Theta = cosTheta * cosTheta; // cos^2 cálcular tan
+    double tan2Theta = (1.0 - cos2Theta) / cos2Theta; // tan(θ) = sin(θ)/cos(θ)
+    double tanTheta = sqrt(tan2Theta); // y cálculamos tan para el término a. es la tangente del ángulo con la normal
     
-    double alpha = aspereza;
-    double cos2Theta = cosTheta * cosTheta;
-    double tan2Theta = (1.0 - cos2Theta) / cos2Theta;
-    double tanTheta = sqrt(tan2Theta);
+    double a = 1.0 / (alpha * tanTheta);  // es el parámetro de rugosidad ajustado por ángulo 
+    if (a >= 1.6) return 1.0; // 1.6 es un valor fijo definido en las fórmulas y si regresa 1 es por que entonces 
+                              // no hay contribución, ya que *1 queda igual todo. 1.6 es un umbral empírico definido 
+                              // por el modelo de Smith. Si regresa 1 es que no hay obstáculos de las microfacetas.
     
-    double a = 1.0 / (alpha * tanTheta);
-    if (a >= 1.6) return 1.0;
-    
-    double a2 = a * a;
-    return (3.535 * a + 2.181 * a2) / (1.0 + 2.276 * a + 2.577 * a2);
+    double a2 = a * a; // si a fue menor que 1.6 entonces se regresa la otra fórmula. 
+    return (3.535 * a + 2.181 * a2) / (1.0 + 2.276 * a + 2.577 * a2);  // fórmula del tema 5 para g1 para beckmann
 }
 // --------------------------- HORA 7 ------------------------------------------------------------------------
 
-double TerminoG(const Vector &wo, const Vector &wi, const Vector &wh, double aspereza) {
-    return TerminoG1(wo, wh, aspereza) * TerminoG1(wi, wh, aspereza);
+// se usa para ver cuánta luz podemos ver en realidad
+// El término G Multiplica las obstrucciones para ambas direcciones (luz entrante y saliente).
+// Ejemplo: Si G1(wi) = 0.5 y G1(wo) = 0.5 → G = 0.25 (solo el 25% de la luz se refleja).
+double TerminoG(const Vector &wo, const Vector &wi, const Vector &wh, double aspereza) { 
+    return TerminoG1(wo, wh, aspereza) * TerminoG1(wi, wh, aspereza); // cálculamos la cantidad de luz que no esobstrida. por la entrada y la salida
 }
 
-Color FresnelConductor(double cosTheta, const Color &eta, const Color &k) {
-    double cos2Theta = cosTheta * cosTheta;
+// Es para la cantidad de energía que es reflejada en una superficie de la luz que entra
+// reflectancía dependiente del ángulo. Fresnell ayuda con los colores de los materiales
+// intensifica en los bordes, por eso es para materiales conductores
+Color FresnelConductor(double cosTheta, const Color &eta, const Color &k) { 
+    double cos2Theta = cosTheta * cosTheta; 
     double sin2Theta = 1.0 - cos2Theta;
     
     Color eta2 = Color(eta.x * eta.x, eta.y * eta.y, eta.z * eta.z);
