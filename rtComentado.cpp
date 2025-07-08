@@ -451,111 +451,149 @@ double TerminoG(const Vector &wo, const Vector &wi, const Vector &wh, double asp
 // reflectancía dependiente del ángulo. Fresnell ayuda con los colores de los materiales
 // intensifica en los bordes, por eso es para materiales conductores
 Color FresnelConductor(double cosTheta, const Color &eta, const Color &k) { 
-    double cos2Theta = cosTheta * cosTheta; 
-    double sin2Theta = 1.0 - cos2Theta;
+    double cos2Theta = cosTheta * cosTheta;   
+    double sin2Theta = 1.0 - cos2Theta;  // sigue siendo la identidad sin²(θ) = 1 - cos²(θ)
+    // eta es el índice de refracción y kapa el coeficiente de extinción y thetha es el ángulo de incidencia
+    Color eta2 = Color(eta.x * eta.x, eta.y * eta.y, eta.z * eta.z); // para hacerla al cuadrado sólo multiplicamos sus elementos
+    Color k2 = Color(k.x * k.x, k.y * k.y, k.z * k.z); // igual para kappa
     
-    Color eta2 = Color(eta.x * eta.x, eta.y * eta.y, eta.z * eta.z);
-    Color k2 = Color(k.x * k.x, k.y * k.y, k.z * k.z);
+    Color t0 = eta2 - k2 - Color(sin2Theta, sin2Theta, sin2Theta); // sin²θ es un color ya que las operaciones se realizan en 
+                                                                   // vectores y para poder restarlas ya que kappa y eta son colores
+                                                                   // Pero la razón principal es por que al ponerlo como color podemos 
+                                                                   // realizar las operaciones para los tres colores RGB de manera paralela
+    Color a2Masb2 = Color(sqrt(t0.x * t0.x + 4.0 * eta2.x * k2.x), // esta fórmula igual está definida.sólo que está puesta en partes
+                          sqrt(t0.y * t0.y + 4.0 * eta2.y * k2.y), // t0 =  η² - κ² - sin²θ y todo junto es  a² + b² = √[(η² - κ² - sin²θ)² + 4η²κ²]
+                          sqrt(t0.z * t0.z + 4.0 * eta2.z * k2.z)); // igual se hace en cada parte del color para hacer los cálculos de manera simultanea
+                                                                    // para los tres colores
+    Color t1 = a2Masb2 + Color(cos2Theta, cos2Theta, cos2Theta); // t1 = a² + b² + cos²θ
+    Color a = Color(sqrt(0.5 * (a2Masb2.x + t0.x)), // a = √[0.5*(a² + b² + η² - κ² - sin²θ)]
+                   sqrt(0.5 * (a2Masb2.y + t0.y)), // igual para todas las líneas
+                   sqrt(0.5 * (a2Masb2.z + t0.z))); // para el cálculo en cada color
     
-    Color t0 = eta2 - k2 - Color(sin2Theta, sin2Theta, sin2Theta);
-    Color a2Masb2 = Color(sqrt(t0.x * t0.x + 4.0 * eta2.x * k2.x),
-                          sqrt(t0.y * t0.y + 4.0 * eta2.y * k2.y),
-                          sqrt(t0.z * t0.z + 4.0 * eta2.z * k2.z));
+    Color t2 = Color(2.0 * cosTheta * a.x, 2.0 * cosTheta * a.y, 2.0 * cosTheta * a.z); // t2 = 2a cosθ
+    Color Rs = Color((t1.x - t2.x) / (t1.x + t2.x), // Rpe es reflectancia para la polarización perpendicular
+                    (t1.y - t2.y) / (t1.y + t2.y), // se hace para todos los RGB
+                    (t1.z - t2.z) / (t1.z + t2.z)); 
     
-    Color t1 = a2Masb2 + Color(cos2Theta, cos2Theta, cos2Theta);
-    Color a = Color(sqrt(0.5 * (a2Masb2.x + t0.x)),
-                   sqrt(0.5 * (a2Masb2.y + t0.y)),
-                   sqrt(0.5 * (a2Masb2.z + t0.z)));
-    
-    Color t2 = Color(2.0 * cosTheta * a.x, 2.0 * cosTheta * a.y, 2.0 * cosTheta * a.z);
-    Color Rs = Color((t1.x - t2.x) / (t1.x + t2.x),
-                    (t1.y - t2.y) / (t1.y + t2.y),
-                    (t1.z - t2.z) / (t1.z + t2.z));
-    
-    Color t3 = Color(cos2Theta * a2Masb2.x + sin2Theta * sin2Theta,
-                    cos2Theta * a2Masb2.y + sin2Theta * sin2Theta,
+    Color t3 = Color(cos2Theta * a2Masb2.x + sin2Theta * sin2Theta, // (a² + b²)cos²θ + sin⁴θ
+                    cos2Theta * a2Masb2.y + sin2Theta * sin2Theta, //igual para todo
                     cos2Theta * a2Masb2.z + sin2Theta * sin2Theta);
     
-    Color t4 = t2 * sin2Theta;
-    Color Rp = Color(Rs.x * (t3.x - t4.x) / (t3.x + t4.x),
-                    Rs.y * (t3.y - t4.y) / (t3.y + t4.y),
+    Color t4 = t2 * sin2Theta; // 2a cosθ sin²θ
+    Color Rp = Color(Rs.x * (t3.x - t4.x) / (t3.x + t4.x), // Ra es reflectancia para la polarización paralela
+                    Rs.y * (t3.y - t4.y) / (t3.y + t4.y), // igual para todos
                     Rs.z * (t3.z - t4.z) / (t3.z + t4.z));
     
-    return Color(0.5 * (Rs.x + Rp.x), 0.5 * (Rs.y + Rp.y), 0.5 * (Rs.z + Rp.z));
+    return Color(0.5 * (Rs.x + Rp.x), 0.5 * (Rs.y + Rp.y), 0.5 * (Rs.z + Rp.z)); // y regresamos el promedio de  las dos para cada color
+    // Rpe y Rpa dependen de las propiedades eta y kappa. si eta es alto, aumenta la reflectancia, si kappa es alto absorve más
+    // luz pero tambien refleja más. Ambas son la parte real e imaginaria del índice de refracción complejo. 
+    // eta, la parte real, controla la velocidad de fase de la luz. A mayor eta, aumenta la reflectancia y más en los bordes
+    // kappa es la parte imaginaria, cuantifica la aoborción de la luz en el material. Un kapa alto indica que absorve luz, pero 
+    // también la refleja más, pq la luz no puede penetrar y rebota, lo cual es clave para los colores metalicos. sin kapa
+    // los materiales serían como vidrio. Sin eta perderían intensidad angular.
 }
 // --------------------------- HORA 8 ------------------------------------------------------------------------
 
-Vector MuestreoMicrofacet(double aspereza, double u1, double u2) {
-    double alpha = aspereza;
+//esta función es para generar las normales de microfacetas y sigue la distribución de Beckmann
+//pra simular las superficies rugosas
+//
+Vector MuestreoMicrofacet(double aspereza, double u1, double u2) { // recibe aspereza, y dos números aleatorios
+    double alpha = aspereza; // definimos la aspereza
     double tan2Theta = -alpha * alpha * log(1.0 - u1);  //  D(wh) = χ⁺(cos θ) * exp(-tan^2θ/α²) / (π α^2 cos^2θ)
-    double cos2Theta = 1.0 / (1.0 + tan2Theta); // 1 + tan^2θ = sec^2θ = 1/cos^2θ
-    double cosTheta = sqrt(cos2Theta); 
+                                                        // en la fórmula es arctan() pero si lo pasamos tenemos la tangente del ángulo polar
+    double cos2Theta = 1.0 / (1.0 + tan2Theta); // 1 + tan^2θ = sec^2θ = 1/cos^2θ usando esta identidaad despejamos cos^2
+    double cosTheta = sqrt(cos2Theta); // y sacamos la reíz cuadrada para tenerla normal
 
     double sin2Theta = 1.0 - cos2Theta; // sin^2θ + cos^2θ = 1  =>  sin^2θ = 1 - cos^2θ
-    double sinTheta = sqrt(sin2Theta); 
-    double phi = 2.0 * M_PI * u2;
+    double sinTheta = sqrt(sin2Theta); // sacamos la raíz cuadrada para tenerla normal
+    double phi = 2.0 * M_PI * u2; // y cálculamos el ángulo azimutal.
 
-    return esfericasACartesianas(cosTheta, sinTheta, phi);
+    return esfericasACartesianas(cosTheta, sinTheta, phi); // pasamos las coordenadas es esfpericas a cartecianas
+    // y así obtenemos el vector wh
 }
 
+// en la 398 se calcula la reflactancia de un material conductor basado en el modelo de microfacetas
+// aquí ya se comnina la D, G y F, pero sólo para encontrar la BRDF. Recibimos una esfera, el vector wi, wo y un vector n
 Color BRDFMicrofacet(const Sphere &obj, const Vector &wi, const Vector &wo, const Vector &n) {
-    Vector s, t, normal = n;
-    coordinateSystem(normal, s, t);
+    Vector s, t, normal = n; // creamos el sistema de coordenasdas tomando el vector n 
+    coordinateSystem(normal, s, t);  // tenemos que ponerlas en un sistema de coordenadas locales, ya que la 
+                                    // distribución Beckmann asume que las microfacetas están orientadas a z como normal
+                                    // el cálcullo par a las coordenadas locales es más simple. 
+                                    // las fórmulas de microfacetas se escriben como si la superficie estuviera alineada con el eje Z
     
-    Vector wiLocal = globalALocal(wi, normal, s, t);
-    Vector woLocal = globalALocal(wo, normal, s, t);
+    Vector wiLocal = globalALocal(wi, normal, s, t); // hacemos wi local
+    Vector woLocal = globalALocal(wo, normal, s, t); // y wo local
     
-    if (wiLocal.z <= 1e-6 || woLocal.z <= 1e-6) return Color();
+    if (wiLocal.z <= 1e-6 || woLocal.z <= 1e-6) return Color(); // asefuramos que wi y wo estén en eñ hemisferio correcto
+                                                              // si es muy pequeño, entonces lo ponemos como sin color.
+                                                              // en caso de alpha algo algunas wh podrían no ser validas
+                                                              // aparte de que ambas se usarán como denominador y no puende ser 0
+                                                              // si las dejamos como 0 podríamos tener artefactos negros o brillos incorrectos
+    Vector whLocal = (wiLocal + woLocal).normalize(); // se saca wh local y se normaliza para sólo tener la dirección
+                                                      
     
-    Vector whLocal = (wiLocal + woLocal).normalize();
+    double D = DistribucionBeckmann(whLocal, obj.aspereza); //sacamos D con wh local y la asperza
+    double G = TerminoG(woLocal, wiLocal, whLocal, obj.aspereza); //también G
+    Color F = FresnelConductor(abs(wiLocal.dot(whLocal)), obj.eta, obj.kappa); // y F se usa abs para evitar errores numéricos
     
-    double D = DistribucionBeckmann(whLocal, obj.aspereza);
-    double G = TerminoG(woLocal, wiLocal, whLocal, obj.aspereza);
-    Color F = FresnelConductor(abs(wiLocal.dot(whLocal)), obj.eta, obj.kappa); 
-    
-    double denominador = 4.0 * abs(woLocal.z) * abs(wiLocal.z); 
-    if (denominador < 1e-6) return Color();
+    double denominador = 4.0 * abs(woLocal.z) * abs(wiLocal.z);  // se usa abs para evitar erroes
+    if (denominador < 1e-6) return Color(); // para evitar dividir entre 0
     
     return Color(F.x * D * G / denominador, F.y * D * G / denominador, F.z * D * G / denominador);
-}
-// --------------------------- HORA 8 ------------------------------------------------------------------------
+} //Muestreo: "¿Qué direcciones son físicamente posibles?"
+  //BRDF: "¿Cuánta luz viaja en esas direcciones?"
+// --------------------------- HORA 9 ------------------------------------------------------------------------
 
 // función general de Monte Carlo que acepta cualquier estrategia de muestreo
-Color monteCarlo(int N, Vector &n, Point &x, const Sphere &obj, 
+// monteCarlo acepta una estrategia de muestreo como parámetro, la cual es un apuntador a una función que
+// acepta cualquier función que regrese un MuestreoResult, y tenga como parámetros un Point, Vector constantes y double
+Color monteCarlo(int N, Vector &n, Point &x, const Sphere &obj,
                  MuestreoResult (*estrategiaMuestreo)(const Point&, const Vector&, double&)) {
-    Color sum;
-    Point puntoSeguro = x + n * 1e-4;
+    Color sum; // declaramos una variable para la suma
+    Point puntoSeguro = x + n * 1e-4;  // se le agreg 1e-4 para evitar que haya intersecciones consigo misma por errors de cálculo
+                                       // así que lo desplazamos un poco, generalmente fuera de la superficie.
+                                       // al multiplicar después debemos ajustarlo con la esfera 
+                                       // se le suma la normal para que el rayo quede afuera, ya que n tiene una dirección
+                                       // hacia afuera de la esfera 
+    for (int i = 0; i < N; ++i) {  // se usa ++i en lugar de i++ ya que i++ genera una copia innecesaria pq devuelve el valor original de 
+                                   //i y luego lo incrementa,  y ++i incrementa su valaor y 
+                                   // devuelve el valor utilizado. 
+        double prob; // declaramos una variable de probabilidad
+        MuestreoResult resultado = estrategiaMuestreo(puntoSeguro, n, prob); // se usa la estrategia de muestreo pasada y se guarda el resultado
+                                                                             // el cual es la estructura del resultado
+        Vector wi = resultado.wi; // optenemos el vector wi del resultado en otra variable para  que sea más legible
 
-    for (int i = 0; i < N; ++i) {
-        double prob;
-        MuestreoResult resultado = estrategiaMuestreo(puntoSeguro, n, prob);
-        Vector wi = resultado.wi;
+        Ray shadowRay(puntoSeguro, wi); // y lanzamos un rayo desde el punto seguro con dirección a wi
+        double t_shadow; // declaramos variables para t_min
+        int id_shadow; // y id_min
 
-        Ray shadowRay(puntoSeguro, wi);
-        double t_shadow;
-        int id_shadow;
+        bool hayInterseccion = intersect(shadowRay, t_shadow, id_shadow); // verificamos si sí hay al menos una intersección
+                                                                          // en la escena con ere rayo. Si sí, es true y tenemos 
+                                                                          // la t más cercana y el id de la esfera más cercana          
 
-        bool hayInterseccion = intersect(shadowRay, t_shadow, id_shadow);
-
-        if (!hayInterseccion) {
+        if (!hayInterseccion) { // si ni hay intersección, pasamos a la siguiente muestra
             continue;
         }
         
-        const Sphere &objIntersectado = spheres[id_shadow];
-        Color Le = objIntersectado.e;
-        Color fr = obj.c * (1.0 / M_PI);
-        double cosTheta = n.dot(wi);
+        const Sphere &objIntersectado = spheres[id_shadow]; // si sí hubo, guardamos la esfera que se intersectó.
+                                                            // se usa & para trabajar con la esferea original.
+                                                            // es como un alias para esa esfera en específico
+                                                            // no se le puede cambiar el valor.
+        Color Le = objIntersectado.e; // guardamos la emición de ese objeto
+        Color fr = obj.c * (1.0 / M_PI); // y cáculamos la BRDF la cual es lambertiana
+        double cosTheta = n.dot(wi); // cálculamos coTheta para la fórmula
 
-        if (cosTheta > 0) {
-            Color contribucion = Le.mult(fr) * (cosTheta / prob);
-            sum = sum + contribucion; 
+        if (cosTheta > 0) { // si cosTheta es menor, significa que no hay contribución por estar atrás
+            Color contribucion = Le.mult(fr) * (cosTheta / prob); // si sí hay, el color de la contribucuón en ese pixel
+                                                                  // es la multiplicación de Le*fr * cosTheta/prob
+            sum = sum + contribucion; // entonces lo sumamos con lo que ya teníamos
         }
     }
-    return sum * (1.0 / N);
+    return sum * (1.0 / N); // y regresamos la suma entre la cantidad de muestras
 }
-// --------------------------- HORA 9 ------------------------------------------------------------------------
-
-Color monteCarloHemisfer(int N, Vector &n, Point &x, const Sphere &obj) {
+// --------------------------- HORA 10 ------------------------------------------------------------------------
+// al pasar el nombre de una fucnión como parámetro en automático se convierte en un puntero a una función
+Color monteCarloHemisfer(int N, Vector &n, Point &x, const Sphere &obj) { // pide un número de muestras, un vector n, punto x y una esfera
     return monteCarlo(N, n, x, obj, MuestreoUniformeHemisferico);
 }
 
@@ -563,10 +601,14 @@ Color monteCarloCoseno(int N, Vector &n, Point &x, const Sphere &obj) {
     return monteCarlo(N, n, x, obj, MuestreoCosenoHemisferico);
 }
 
+// las funciones wrapper son la envoltura para poder llamar a monteCarlo. 
 MuestreoResult MuestreoAreaWrapper(const Point &x, const Vector &n, double &prob) {
     return MuestreoArea(x, prob);
 }
 
+// est afucnión usa a monteCarlo para que llame a la envoltura, ya que se necesita el parámetro del vector n
+// que el muestreo de área no necesita, entonces wrapper sí tiene n aunque no la use sólo para después llamar a
+// la funci´n del muestreo
 Color monteCarloArea(int N, Vector &n, Point &x, const Sphere &obj) {
     return monteCarlo(N, n, x, obj, MuestreoAreaWrapper);
 }
@@ -578,7 +620,7 @@ MuestreoResult MuestreoAnguloSolidoWrapper(const Point &x, const Vector &n, doub
 Color monteCarloAnguloSolido(int N, Vector &n, Point &x, const Sphere &obj) {
     return monteCarlo(N, n, x, obj, MuestreoAnguloSolidoWrapper);
 }
-// --------------------------- HORA 10 ------------------------------------------------------------------------
+// --------------------------- HORA 11 ------------------------------------------------------------------------
 
 Color monteCarloFuentePuntual(Vector &n, Point &x, const Sphere &obj) {
     Point puntoSeguro = x + n * 1e-4;
