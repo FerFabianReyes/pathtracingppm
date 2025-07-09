@@ -7,8 +7,8 @@
 
 
 #define N_ 32
-#define N_ESFERAS 9
-#define N_ARREGLO 8
+#define N_ESFERAS 8
+#define N_ARREGLO 7
 
 class Vector 
 {
@@ -111,21 +111,21 @@ Sphere spheres[] = {
         Sphere(1e5,  Point(0, -1e5 - 40.8, 0),  Color(.25, .75, .75)), // suelo
         Sphere(1e5,  Point(0, 1e5 + 40.8, 0),  Color(.75, .75, .25)), // techo
         // esferas normales para el resto de muestreos
-        Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.2, .3, .4)), 
-        Sphere(16.5, Point(23, -24.3, -3.6),     Color(.4, .3, .2)),
+        /*Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.2, .3, .4)), 
+        Sphere(16.5, Point(23, -24.3, -3.6),     Color(.4, .3, .2)),*/
 
         // esferas de aluminio y oro para microfacet
-       /* Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.9, .9, .9), Color(), CONDUCTOR, 0.3, 
+        Sphere(16.5, Point(-23, -24.3, -34.6),  Color(.2, .3, .4), Color(), CONDUCTOR, 0.3, 
            Color(1.44, 0.96, 0.61), Color(7.47, 6.52, 5.29)), // Aluminio
-        Sphere(16.5, Point(23, -24.3, -3.6),     Color(.9, .8, .3), Color(), CONDUCTOR, 0.3,
+        Sphere(16.5, Point(23, -24.3, -3.6),     Color(.4, .3, .2), Color(), CONDUCTOR, 0.3,
            Color(0.143, 0.374, 1.442), Color(3.982, 2.386, 1.603)), // Oro */
 
         // fuentes luminosas   
-        //FuenteLuminosa(10.5, Point(0, 24.3, 0), Color(1, 1, 1)) // fuente normal
+        FuenteLuminosa(10.5, Point(0, 24.3, 0), Color(1, 1, 1)) // fuente normal
     	//FuentePuntual(Point(0, 24.3, 0)) // fuente puntual 
 
-        FuenteLuminosa(10.5, Point(-23, 24.3, 0), Color(1, 1, 1), Color(12, 5, 5)),
-        FuenteLuminosa(5, Point(23, 24.3, -50), Color(1, 1, 1), Color(5, 5, 12)) 
+       // FuenteLuminosa(10.5, Point(-23, 24.3, 0), Color(1, 1, 1), Color(12, 5, 5)),
+       // FuenteLuminosa(5, Point(23, 24.3, -50), Color(1, 1, 1), Color(5, 5, 12)) 
 };
 
 Sphere& fuenteLuminosa = spheres[N_ARREGLO];
@@ -323,8 +323,8 @@ double DistribucionBeckmann(const Vector &wh, double aspereza) {
     double cos2Theta = cosTheta * cosTheta;
     double tan2Theta = (1.0 - cos2Theta) / cos2Theta;
     
-    double chi = xMas(cosTheta);
-    return chi * exp(-tan2Theta / (alpha * alpha)) / 
+    double x = xMas(cosTheta);
+    return x * exp(-tan2Theta / (alpha * alpha)) / 
            (M_PI * alpha * alpha * cos2Theta * cos2Theta);
 }
 
@@ -366,7 +366,7 @@ Color FresnelConductor(double cosTheta, const Color &eta, const Color &k) {
                    sqrt(0.5 * (a2Masb2.z + t0.z)));
     
     Color t2 = Color(2.0 * cosTheta * a.x, 2.0 * cosTheta * a.y, 2.0 * cosTheta * a.z);
-    Color Rs = Color((t1.x - t2.x) / (t1.x + t2.x),
+    Color Rpe = Color((t1.x - t2.x) / (t1.x + t2.x),
                     (t1.y - t2.y) / (t1.y + t2.y),
                     (t1.z - t2.z) / (t1.z + t2.z));
     
@@ -375,11 +375,11 @@ Color FresnelConductor(double cosTheta, const Color &eta, const Color &k) {
                     cos2Theta * a2Masb2.z + sin2Theta * sin2Theta);
     
     Color t4 = t2 * sin2Theta;
-    Color Rp = Color(Rs.x * (t3.x - t4.x) / (t3.x + t4.x),
-                    Rs.y * (t3.y - t4.y) / (t3.y + t4.y),
-                    Rs.z * (t3.z - t4.z) / (t3.z + t4.z));
+    Color Rpa = Color(Rpe.x * (t3.x - t4.x) / (t3.x + t4.x),
+                    Rpe.y * (t3.y - t4.y) / (t3.y + t4.y),
+                    Rpe.z * (t3.z - t4.z) / (t3.z + t4.z));
     
-    return Color(0.5 * (Rs.x + Rp.x), 0.5 * (Rs.y + Rp.y), 0.5 * (Rs.z + Rp.z));
+    return Color(0.5 * (Rpe.x + Rpa.x), 0.5 * (Rpe.y + Rpa.y), 0.5 * (Rpe.z + Rpa.z));
 }
 
 Vector MuestreoMicrofacet(double aspereza, double u1, double u2) {
@@ -533,7 +533,7 @@ Color pathTracing(const Ray &ray, int profundidad, int maxProfundidad) {
     Color L(0,0,0);
     
     // Iluminación directa. Se puede cambiar el tipo de muestreo
-    L = L + monteCarloCoseno(N_,n, x, obj);
+    L = L + monteCarloAnguloSolido(N_,n, x, obj);
     
     // Muestreo según material
     Vector wo = Vector(0,0,0) - ray.d;
@@ -550,7 +550,7 @@ Color pathTracing(const Ray &ray, int profundidad, int maxProfundidad) {
             double cosTheta = n.dot(wi);
             
             double factor = (cosTheta / prob);
-            L = L + Color(fr.x * Li.x * factor, fr.y * Li.y * factor, fr.z * Li.z * factor);
+            L = L + Color(fr.x * Li.x, fr.y * Li.y, fr.z * Li.z) * factor;
         }
     } 
     else if (obj.material == CONDUCTOR) {
@@ -580,7 +580,7 @@ Color pathTracing(const Ray &ray, int profundidad, int maxProfundidad) {
                 Color Li = pathTracing(nuevoRayo, profundidad + 1, maxProfundidad);
                 double factor = (G * fabs(wo.dot(wh)) / denom);
                 
-                L = L + Color(F.x * Li.x * factor, F.y * Li.y * factor, F.z * Li.z * factor);
+                L = L + Color(F.x * Li.x, F.y * Li.y, F.z * Li.z) * factor;
             }
         }
     }

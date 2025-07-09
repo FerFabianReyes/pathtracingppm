@@ -293,6 +293,7 @@ MuestreoResult MuestreoFuentePuntual(const Point &x, double &prob) { // recibimo
 	Vector wi = fuenteLuminosa.p - x; // apunta al centro de la fuente
 	prob = 1.0; // la probabilidad es 1 por que siempre le daremos a la fuente
 	return MuestreoResult(wi, prob, fuenteLuminosa.p);  // y damos el resultado. Ahora como punto ponemos el punto de la fuente de luz
+    // no normalizamos el vector wi por que en el monteCarlo de la fuete puntual necesitamos sacara la distancia
 }
 // --------------------------- HORA 4 ------------------------------------------------------------------------
 
@@ -443,6 +444,7 @@ double TerminoG1(const Vector &w, const Vector &wh, double aspereza) { // recibe
 // se usa para ver cuánta luz podemos ver en realidad
 // El término G Multiplica las obstrucciones para ambas direcciones (luz entrante y saliente).
 // Ejemplo: Si G1(wi) = 0.5 y G1(wo) = 0.5 → G = 0.25 (solo el 25% de la luz se refleja).
+// estamos usando coordenadas locales por que nos estamos poniendo en el lugar de la microfaceta
 double TerminoG(const Vector &wo, const Vector &wi, const Vector &wh, double aspereza) { 
     return TerminoG1(wo, wh, aspereza) * TerminoG1(wi, wh, aspereza); // cálculamos la cantidad de luz que no esobstrida. por la entrada y la salida
 }
@@ -594,16 +596,17 @@ Color monteCarlo(int N, Vector &n, Point &x, const Sphere &obj,
 // --------------------------- HORA 10 ------------------------------------------------------------------------
 // al pasar el nombre de una fucnión como parámetro en automático se convierte en un puntero a una función
 Color monteCarloHemisfer(int N, Vector &n, Point &x, const Sphere &obj) { // pide un número de muestras, un vector n, punto x y una esfera
-    return monteCarlo(N, n, x, obj, MuestreoUniformeHemisferico);
+    return monteCarlo(N, n, x, obj, MuestreoUniformeHemisferico); // se hace el montecarlo psándile el tipo de muestreo como parámetro
 }
 
+// igual pedimos la cantidad de muestras, un vector n, y una esfera y a monteCarlo le pasamos estos parámetros con el tipo de muestreo
 Color monteCarloCoseno(int N, Vector &n, Point &x, const Sphere &obj) {
     return monteCarlo(N, n, x, obj, MuestreoCosenoHemisferico);
 }
 
 // las funciones wrapper son la envoltura para poder llamar a monteCarlo. 
 MuestreoResult MuestreoAreaWrapper(const Point &x, const Vector &n, double &prob) {
-    return MuestreoArea(x, prob);
+    return MuestreoArea(x, prob); // el muestreo de área sólo ocupa dos argumentos ya que no ocupa buscar la fuente de luz
 }
 
 // est afucnión usa a monteCarlo para que llame a la envoltura, ya que se necesita el parámetro del vector n
@@ -612,126 +615,190 @@ MuestreoResult MuestreoAreaWrapper(const Point &x, const Vector &n, double &prob
 Color monteCarloArea(int N, Vector &n, Point &x, const Sphere &obj) {
     return monteCarlo(N, n, x, obj, MuestreoAreaWrapper);
 }
-
+// monteCarloAnguloSolido llama a monteCarlo, la cual llama a esta fución que es una envoltura para el muestreo en
+// ángulo sólido, ya que en el puntero se piden argumentos especídifos y el ángulo sólido sólo ocupa dos de ellos
+// entonces se pone el vector n en la envoltura para que monteCarlo acepte esta función como argumento
 MuestreoResult MuestreoAnguloSolidoWrapper(const Point &x, const Vector &n, double &prob) {
     return MuestreoAnguloSolido(x, prob);
 }
 
+// llama a monteCarlo pasándole como argumento la envoltura de la función a usar
 Color monteCarloAnguloSolido(int N, Vector &n, Point &x, const Sphere &obj) {
     return monteCarlo(N, n, x, obj, MuestreoAnguloSolidoWrapper);
 }
 // --------------------------- HORA 11 ------------------------------------------------------------------------
 
+// el muestreo de fuente puntual en 477 se le pasa un vectior n, un punto y una esfera. 
+// se hizo una función aparte de monteCarlo ya que para una fuente puntual hacemos el muestreo directo de la fuente de luz
+// ya que sólo al haber un punto que emite luz, sólo hay una dirección de donde puede tener iluminación, así que 
+// que se quita el bucle para la sumatoria.
 Color monteCarloFuentePuntual(Vector &n, Point &x, const Sphere &obj) {
-    Point puntoSeguro = x + n * 1e-4;
-    
+    Point puntoSeguro = x + n * 1e-4; // el punto es seguro ya que si lo dejamos tal cual, la fórmula lo toma como
+                                      // un borde de la esfera perfecto, pero puede que esté un poquito más abajo y tenga una 
+                                      // auto-intersección, entonces lo subimos 1e-4 en la dirección de la normal (arriba) para evitar 
+                                      // que ocurra esto.
     // obtener dirección y punto
-    double prob;
-    MuestreoResult resultado = MuestreoFuentePuntual(puntoSeguro, prob);
-    Vector wi = resultado.wi;
-    Point puntoEnFuente = resultado.puntoEnFuente;
-    
+    double prob; // declaramos una variable para la probabilidad
+    MuestreoResult resultado = MuestreoFuentePuntual(puntoSeguro, prob); // usamos el muestreo de la funte puntual
+    Vector wi = resultado.wi; //y del resultado sacamos la wi calculada
+    Point puntoEnFuente = resultado.puntoEnFuente; // declaramos un punto como el punto en fuente.
+                                                   // estas las declaramos como variables aparte para no tener que 
+                                                   // estar haciendo resultado.puntoEnFuente y sea más legible
     // calcular distancia a la fuente
-    Vector direccionCompleta = wi;
-    double distanciaAlCuadrado = direccionCompleta.dot(direccionCompleta);
-    double distancia = sqrt(distanciaAlCuadrado);
-    wi = wi.normalize();
+    Vector direccionCompleta = wi; // sacamos otra variable para poder tener la dirección completa aunque está de más. se puede cambiar
+    double distanciaAlCuadrado = direccionCompleta.dot(direccionCompleta); // sacamos la distancia al cuadrado ya que el producto punto nos da un escalar
+    double distancia = sqrt(distanciaAlCuadrado); // y le sacamos raís para tener la distancia 
+    wi = wi.normalize(); // y una vez hecho eso, normalizamos nuestro vector
     // verificar si hay obstáculos 
-    Ray shadowRay(puntoSeguro, wi);
-    double t_shadow;
+    Ray shadowRay(puntoSeguro, wi); // creamos un rato para ver si hay visibilidad
+    double t_shadow; 
     int id_shadow;
     
-    if (intersect(shadowRay, t_shadow, id_shadow)) {
-        // si intersecta algo antes de llegar a la fuente, está en sombra
+    if (intersect(shadowRay, t_shadow, id_shadow)) { // si logra hacer una intersección en el camino hacia la luz
+        // y esa intersección es menor a la distancia que hay hasta la luz
         if (t_shadow < distancia - 1e-4) {
-            return Color(); // en sombra
+            return Color(); // significa que no llegó y que hay algo tapandi la luz
         }
     }
 
-    Color Le = fuenteLuminosa.e;
+    Color Le = fuenteLuminosa.e; // guardamos la emisión de la fuente luminosa
     Color fr = obj.c * (1.0 / M_PI); // BRDF lambertiana
-    double cosTheta = n.dot(wi);
+    double cosTheta = n.dot(wi); // tenemos el cactor cosTheta
     
-    if (cosTheta > 0) {
+    if (cosTheta > 0) { // si este es mayor a 0
+        // tomamos la contribución de la luz en ese punto, el cual es toda la que tendrá 
         // para fuente puntual, la intensidad decrece con 1/r^2
         Color contribucion = Le.mult(fr) * (cosTheta / distanciaAlCuadrado);
-        return contribucion;
+        return contribucion; // y regresamos la contribución 
     }
     
     return Color(); // no hay contribución si cosTheta <= 0
 }
-// --------------------------- HORA 11 ------------------------------------------------------------------------
+// --------------------------- HORA 12 ------------------------------------------------------------------------
 
-Color pathTracing(const Ray &ray, int profundidad, int maxProfundidad) {
-    if (profundidad >= maxProfundidad) return Color();
+
+// es path tracing explícito, ya que se toma la iluminación directa de manera explícita y apartir de allí genera un nuevi rayo según 
+// el material. Primero verificamos si hay intersecciones, vemos el tipo de muestreo para iluminación directa, usamos el tipo
+// de muestreo según el material, y usamos recursión para generar nuevos rayos 
+Color pathTracing(const Ray &ray, int profundidad, int maxProfundidad) { // recibimos un rayo, la profunfidad donde nos encontramos y la profundidad máxima
+    if (profundidad >= maxProfundidad) return Color(); // si se llega al punto en el que la profundidad 
+                                                       // actual ya llegó a la máxima permitida, se regresa un color negro.
+    double t; // definimos t para las intersecciones
+    int id; // e id para la esfera más cercana
+    if (!intersect(ray, t, id)) return Color(); // si no hay intersección, se regresa un color negro (para nuestra escena no puede pasar ya que está rodeada en una cajita)
     
-    double t;
-    int id;
-    if (!intersect(ray, t, id)) return Color();
-    
-    const Sphere &obj = spheres[id];
-    Point x = ray.o + ray.d * t;
-    Vector n = (x - obj.p).normalize();
+    const Sphere &obj = spheres[id]; // guardamos la esfera más cercana 
+    Point x = ray.o + ray.d * t; // y cálculamos el punto de la intersección, el cuál es el origen del rayo, con la 
+                                 // dirección del rayo por la distancia hacia la esfera
+    Vector n = (x - obj.p).normalize(); // cálculamos la normal que va desde el centro de la esfera al punto de intersección y la normalizamos
     
     // Si es fuente luminosa, retornar emisión
-    if (obj.e.x > 0 || obj.e.y > 0 || obj.e.z > 0) {
-        return obj.e;
+    if (obj.e.x > 0 || obj.e.y > 0 || obj.e.z > 0) { // se verifican todos los valores de la emisión ya que 
+        return obj.e;                                // podría pasar que se  emita luz de otros colores
     }
  
-    Point puntoSeguro = x + n * 1e-4;
-    Color L(0,0,0);
+    Point puntoSeguro = x + n * 1e-4; // el punto seguro lo sacamos para evitar autointersección, ya que matemáticamente es una esfera
+                                      // con un borde perfecto, pero si el punto está un poquito más abajo se puede tomar
+                                      // como una falta intersección, aí que lo subimos tantito
+    Color L(0,0,0); // definimos un color L el cual será la emisión total de ese punto
     
     // Iluminación directa. Se puede cambiar el tipo de muestreo
-    L = L + monteCarloCoseno(N_,n, x, obj);
-    
-    // Muestreo según material
-    Vector wo = Vector(0,0,0) - ray.d;
-    
-    if (obj.material == DIFFUSO) {
-        double prob;
-        MuestreoResult resultado = MuestreoCosenoHemisferico(puntoSeguro, n, prob);
-        Vector wi = resultado.wi;
+    L = L + monteCarloAnguloSolido(N_,n, x, obj);  // el el código tenemos varios tipos de muestreo, si queremos usar path tracing para
+                                             // cualquier tipo de muestreo, se debe de cambiar aquí. Tendríamos muestreo de área
+                                             // de coseno, fuente puntual, etc
+    Vector wo = Vector(0,0,0) - ray.d; // declaramos un vector de entrada, el cual va desde 0 con la dirección del rayo, pero invversa
+                                       // wo es la dirección desde el punto de intersección hasta el observador. Es la dirección por la cual la luz "sale" del punto hacia donde estamos mirando.
+                                       // al restarle a un vector 0 la dirección del rayo, hacemos que la dirección esté al lado contrario
+                                       // ahora sí saliendo desde la intersección hasta la camara   
+    if (obj.material == DIFFUSO) { // si el material de la esferea es difuso
+        double prob; // declaramos una probabilidad
+        MuestreoResult resultado = MuestreoCosenoHemisferico(puntoSeguro, n, prob); // usamos el muestreo de conseno hemisferico ya que es el menor para materiales difusos
+                                                                                    //n  es el vector que sale de la primera intersección
+        Vector wi = resultado.wi; // y optenemos del resultado la dirección wi
 // --------------------------- HORA 12 ------------------------------------------------------------------------
-        
-        if (prob > 1e-6 && n.dot(wi) > 1e-6) {
-            Ray nuevoRayo(puntoSeguro, wi);
-            Color Li = pathTracing(nuevoRayo, profundidad + 1, maxProfundidad);
-            Color fr = obj.c * (1.0 / M_PI);
-            double cosTheta = n.dot(wi);
+    
+        if (prob > 1e-6 && n.dot(wi) > 1e-6) {  // verificamos si la probabilidad es más grande que 0, ya que en el muestreo de área
+                                                // o en ángulo sólido podría haber estos casos
+                                                // tambien se garantiza que wi no sea perpendicular a n, esto puede pasar en el muestreo 
+                                                // de coseno hemisferico
+            Ray nuevoRayo(puntoSeguro, wi);  // creamos un nuevo rayo con la nueva dirección que obtuvimos con el muestreo
+            Color Li = pathTracing(nuevoRayo, profundidad + 1, maxProfundidad); // hacemos las llamadas recursivas
+                                                                                // para los rebotes, sumando uno al reppte actual
+            Color fr = obj.c * (1.0 / M_PI); // sacamos la BRDF para el material lambertiano
+            double cosTheta = n.dot(wi); // sacamos el coseno de theta para esa dirección y la normal
             
-            double factor = (cosTheta / prob);
-            L = L + Color(fr.x * Li.x * factor, fr.y * Li.y * factor, fr.z * Li.z * factor);
+            double factor = (cosTheta / prob); // es el factor para corregir el sesgo introducido por el muestreo
+            L = L + Color(fr.x * Li.x * factor, fr.y * Li.y * factor, fr.z * Li.z * factor); //L es el nuevo valor de la radiancia, que contiene
+                                                                            // la iluminación directa más el color dado por la iluminación global
+                                                                            // el cual es el valor de la BRDF por la ilumincación total
+                                                                            // de los caminos por el factor del sesgo 
         }
     } 
-    else if (obj.material == CONDUCTOR) {
-        double u1 = (double)rand() / RAND_MAX;
-        double u2 = (double)rand() / RAND_MAX;
+    else if (obj.material == CONDUCTOR) { // si el material es un conductor
+        double u1 = (double)rand() / RAND_MAX; // definimos números aleatorios 
+        double u2 = (double)rand() / RAND_MAX; 
         
         Vector s, t;
-        coordinateSystem(n, s, t);
+        coordinateSystem(n, s, t); // creamos un sistema de coordenadas con respecto a n
         
-        Vector whLocal = MuestreoMicrofacet(obj.aspereza, u1, u2);
-        Vector wh = localAGlobal(whLocal, n, s, t);
-        wh = wh.normalize();
+        Vector whLocal = MuestreoMicrofacet(obj.aspereza, u1, u2); // se hace el muestreo de microfacet para tener 
+                                                                   // wh de manera local
+        Vector wh = localAGlobal(whLocal, n, s, t); // ahora este vector lo pasamos a global
+        wh = wh.normalize(); // se normaliza sólo para tener la dirección
         
-        Vector wi = wh * (2.0 * wo.dot(wh)) - wo;
-        wi = wi.normalize();
+        Vector wi = wh * (2.0 * wo.dot(wh)) - wo; // es la relexión especular sobre la micronormal de una faceta
+                                                  // que se usa para modelar materiales conductores 
+                                                  // con esto nos aseguramos que el vector wi tenga el mismo ángulo pero contrario que wo
+                                                  // wo.dot(wh) es el coseno del ángulo entre wo y wh
+                                                  //  wo.dot(wh) * wh es la proyección de wo en wh. La fórmula se despeja encontrando
+                                                  // un vector perpendicular a wo.
+        wi = wi.normalize(); // lo normalizamos ya que sólo queremos la dirección
         
-        if (n.dot(wi) > 1e-6) {
-            double D = DistribucionBeckmann(whLocal, obj.aspereza);
-            double G = TerminoG(globalALocal(wo, n, s, t), globalALocal(wi, n, s, t), whLocal, obj.aspereza);
-            Color F = FresnelConductor(fabs(wo.dot(wh)), obj.eta, obj.kappa);
+        if (n.dot(wi) > 1e-6) { // si no nos aseguramos que wi sí esté del otro lado de n, entonces puede dar ruido
+            double D = DistribucionBeckmann(whLocal, obj.aspereza); // cálculamos cuántas microfacetas hay alineadas a n
+            double G = TerminoG(globalALocal(wo, n, s, t), globalALocal(wi, n, s, t), whLocal, obj.aspereza); // vemos cuáles de esas sí contribuyen 
+            Color F = FresnelConductor(fabs(wo.dot(wh)), obj.eta, obj.kappa); // y vemos la reflectancia. 
+                                                                              // se usa fabs par garantizar que sea positivo
             
+            // Cálculo de la probabilidad de muestreo de la dirección ωₒ dado ωₕ (microfaceta)
+            // - D: Valor de la NDF (Normal Distribution Function) en ωₕ (densidad de microfacetas)
+            // - whLocal.z: Componente z de ωₕ en coordenadas locales (equivale a n·ωₕ)
+            // - wo.dot(wh): Coseno del ángulo entre ωₒ y ωₕ (para el Jacobiano 4|ωₒ·ωₕ|)
+            // La fórmula es: p(ωₒ) = D(ωₕ) * (n·ωₕ) / (4|ωₒ·ωₕ|) (Tema 5, p. 48)
             double probMicrofacet = D * whLocal.z / (4.0 * fabs(wo.dot(wh)));
-            double denom = probMicrofacet * fabs(n.dot(wh));
-// --------------------------- HORA 12 ------------------------------------------------------------------------
 
-// ************************************* MARTES **************************************************
-            if (denom > 1e-6) {
+            // Denominador ajustado para el estimador Monte Carlo:
+            // - probMicrofacet: p(ωₒ) calculada arriba
+            // - n.dot(wh): Producto punto entre la normal macroscópica (n) y ωₕ (microfaceta)
+            // Se multiplica p(ωₒ) * (n·ωₕ) para cancelar términos en la BRDF posteriormente
+            // Nota: fabs() garantiza no división por negativos (conservación de energía)
+            double denom = probMicrofacet * fabs(n.dot(wh));
+
+            // Evitar división por cero o valores numéricamente inestables (< 1e-6)
+            if (denom > 1e-6) { 
+                // Generar nuevo rayo para path tracing recursivo:
+                // - puntoSeguro: Punto de intersección desplazado en la dirección de n (para evitar self-intersection)
+                // - wi: Dirección muestreada (ωᵢ = 2(ωₕ·ωₒ)ωₕ - ωₒ, reflexión especular sobre ωₕ)
                 Ray nuevoRayo(puntoSeguro, wi);
+
+                // Llamada recursiva para calcular la radiancia entrante (Lᵢ):
+                // - nuevoRayo: Rayo hacia la dirección muestreada wi
+                // - profundidad + 1: Incrementar contador de rebotes
+                // - maxProfundidad: Límite de rebotes para evitar recursión infinita
                 Color Li = pathTracing(nuevoRayo, profundidad + 1, maxProfundidad);
+
+                // Factor de corrección Monte Carlo:
+                // - G: Término geométrico (masking-shadowing) de la BRDF
+                // - wo.dot(wh): |ωₒ·ωₕ| (aparece en el numerador de la BRDF)
+                // - denom: p(ωₒ)*(n·ωₕ) (denominador ajustado)
+                // Fórmula final: (G * |ωₒ·ωₕ|) / (p(ωₒ)*(n·ωₕ)) = (G * 4|ωₒ·ωₕ|²) / (D*(n·ωₕ)²) (tras sustituir p(ωₒ))
                 double factor = (G * fabs(wo.dot(wh)) / denom);
-                
+
+                // Acumular contribución de la muestra actual a la radiancia total (Lₒ):
+                // - F: Término de Fresnel (dependiente del material)
+                // - Li: Radiancia entrante calculada recursivamente
+                // - factor: Corrección de importancia muestral
+                // Se descompone por canales RGB (x, y, z) para preservar el color
                 L = L + Color(F.x * Li.x * factor, F.y * Li.y * factor, F.z * Li.z * factor);
             }
         }
@@ -740,8 +807,9 @@ Color pathTracing(const Ray &ray, int profundidad, int maxProfundidad) {
     return Color(fmin(fmax(L.x, 0.0), 1.0), fmin(fmax(L.y, 0.0), 1.0), fmin(fmax(L.z, 0.0), 1.0));
 }
 
-
-bool shade(const Ray &r, Point &x, Vector &n, const Sphere *&obj) {
+// es una función general que nos dice si hubi una intersección es una esfera con un rayo
+// y guarda el punto de intersección, y la normal en el punto de intersección
+bool shade(const Ray &r, Point &x, Vector &n, const Sphere *&obj) {  // recibe un rayo, un punto, un vector n y una esfera
     double t;
     int id = 0;
     
@@ -754,15 +822,16 @@ bool shade(const Ray &r, Point &x, Vector &n, const Sphere *&obj) {
     n = (x - obj->p).normalize(); // normal en el punto de intersección
     
     return true;
-}
+} 
 // --------------------------- HORA 13 ------------------------------------------------------------------------
 
-Color shadeHemisfer(const Ray &r) {
-    Point x;
-    Vector n;
-    const Sphere *obj;
+// es una función que usa shade para el muestreo de hemisferio
+Color shadeHemisfer(const Ray &r) { // recibe un rayo
+    Point x; // de claramos un punto x
+    Vector n; // un vector n
+    const Sphere *obj; // y una esfera
     
-    if (!shade(r, x, n, obj))
+    if (!shade(r, x, n, obj)) // vemos si hay 
         return Color();  // el rayo no intersecto objeto, return Vector() == negro
     // Si el objeto emite luz, retornar directamente la emisión
     if (obj->e.x > 0 || obj->e.y > 0 || obj->e.z > 0) { 
