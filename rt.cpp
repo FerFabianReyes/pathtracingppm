@@ -6,7 +6,7 @@
 #include <time.h>
 
 
-#define N_ 32
+#define N_ 1
 #define N_ESFERAS 8
 #define N_ARREGLO 7
 
