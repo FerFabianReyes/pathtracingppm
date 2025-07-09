@@ -900,9 +900,9 @@ Color shadeAnguloSolido(const Ray &r) {
 
 Color shadeMicrofacet(const Ray &r) {
     Color L(0,0,0);
-    int spp = 64; // samples per pixel
+    int spp = 64; // samples por pixel
     for (int i = 0; i < spp; ++i) {
-        Color sample = pathTracing(r, 0, 8);
+        Color sample = pathTracing(r, 0, 10);
         // acumulación
         L = Color(L.x + sample.x / spp,
                  L.y + sample.y / spp,
